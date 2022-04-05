@@ -104,7 +104,8 @@ int main(void) {
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
     int x0, x1, y0, y1;
-    while (1) {
+    // remember to change to 1
+    while (x0>0) {
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
         // code for drawing the boxes and lines
