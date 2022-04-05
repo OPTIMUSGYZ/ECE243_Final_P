@@ -256,3 +256,4 @@ void clear_screen() {
 void plot_pixel(int x, int y, short int line_color) {
     *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
+//
