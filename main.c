@@ -35,13 +35,14 @@
 
 /* Constants for animation */
 #define BOX_LEN 2
-#define NUM_BOXES 8
+#define NUM_CANNONS 10
 
 #define FALSE 0
 #define TRUE 1
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 // Begin part3.c code for Lab 7
 
@@ -52,7 +53,7 @@ volatile int drewPixelBack[RESOLUTION_X * RESOLUTION_Y][2];
 volatile int drewPixelFront[RESOLUTION_X * RESOLUTION_Y][2];
 volatile int back = 1;
 
-void draw_line(int x0, int x1, int y0, int y1, short int colour);
+void draw_line(int x0, int y0, int x1, int y1, short int colour);
 
 // number of drawn pixel in each buffer
 volatile int ndrewPixelBack = 0;
@@ -66,29 +67,31 @@ void clear_screen();
 
 void wait4VSync();
 
+void drawCannon(int x, int y, int r, double direction);
+
 int main(void) {
     volatile int *pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
 
     // clear drewPixelBack&2
     int i;
     for (i = 0; i < RESOLUTION_X * RESOLUTION_Y; i++) {
-            drewPixelBack[i][0] = -1;
-            drewPixelBack[i][1] = -1;
-            drewPixelFront[i][0] = -1;
-            drewPixelFront[i][1] = -1;
+        drewPixelBack[i][0] = -1;
+        drewPixelBack[i][1] = -1;
+        drewPixelFront[i][0] = -1;
+        drewPixelFront[i][1] = -1;
     }
 
-    int lineColour[NUM_BOXES], boxColour[NUM_BOXES], dxBox[NUM_BOXES], dyBox[NUM_BOXES], xBox[NUM_BOXES], yBox[NUM_BOXES];
-    short int colourArr[10] = {WHITE, YELLOW, RED, GREEN, BLUE, CYAN, MAGENTA, GREY, PINK, ORANGE};
+    int lineColour[NUM_CANNONS], boxColour[NUM_CANNONS], dxBullets[NUM_CANNONS], dyBullets[NUM_CANNONS], xCannon[NUM_CANNONS], yCannon[NUM_CANNONS];
+    short int colourArr[10] = {BLACK, YELLOW, RED, GREEN, BLUE, CYAN, MAGENTA, GREY, PINK, ORANGE};
 
     // initialize location and direction of rectangles
-    for (i = 0; i < NUM_BOXES; i++) {
+    for (i = 0; i < NUM_CANNONS; i++) {
         boxColour[i] = colourArr[rand() % 10];
         lineColour[i] = colourArr[rand() % 10];
-        xBox[i] = rand() % RESOLUTION_X;
-        yBox[i] = rand() % RESOLUTION_Y;
-        dxBox[i] = rand() % 2 * 2 - 1;
-        dyBox[i] = rand() % 2 * 2 - 1;
+        xCannon[i] = rand() % RESOLUTION_X;
+        yCannon[i] = rand() % RESOLUTION_Y;
+        dxBullets[i] = rand() % 2 * 2 - 1;
+        dyBullets[i] = rand() % 2 * 2 - 1;
     }
 
     /* set front pixel buffer to start of FPGA On-chip memory */
@@ -105,16 +108,17 @@ int main(void) {
 
     int x0, x1, y0, y1;
     // remember to change to 1
-    while (x0>0) {
+    while (1) {
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
+        drawCannon(10, 10, 10, 0);
         // code for drawing the boxes and lines
         int j;
-        for (i = 0; i < NUM_BOXES; i++) {
-            x0 = xBox[i];
-            y0 = yBox[i];
-            x1 = xBox[(i + 1) % NUM_BOXES];
-            y1 = yBox[(i + 1) % NUM_BOXES];
+        for (i = 0; i < NUM_CANNONS; i++) {
+            x0 = xCannon[i];
+            y0 = yCannon[i];
+            x1 = xCannon[(i + 1) % NUM_CANNONS];
+            y1 = yCannon[(i + 1) % NUM_CANNONS];
             draw_line(x0, y0, x1, y1, lineColour[i]);
             // boxes are drawn at the bottom right of the line's end point
             for (j = 0; j <= BOX_LEN; j++) {
@@ -125,20 +129,22 @@ int main(void) {
             }
         }
         // code for updating the locations of boxes
-        for (i = 0; i < NUM_BOXES; i++) {
-            if (xBox[i] <= 0 && dxBox[i] < 0) { // if at left edge and wants to go left
-                dxBox[i] = 1;
-            } else if (xBox[i] >= RESOLUTION_X - 1 - BOX_LEN && dxBox[i] > 0) { // if at right edge and wants to go right
-                dxBox[i] = -1;
+        for (i = 0; i < NUM_CANNONS; i++) {
+            if (xCannon[i] <= 0 && dxBullets[i] < 0) { // if at left edge and wants to go left
+                dxBullets[i] = 1;
+            } else if (xCannon[i] >= RESOLUTION_X - 1 - BOX_LEN &&
+                       dxBullets[i] > 0) { // if at right edge and wants to go right
+                dxBullets[i] = -1;
             }
-            if (yBox[i] <= 0 && dyBox[i] < 0) { // if at top edge and wants to go up
-                dyBox[i] = 1;
-            } else if (yBox[i] >= RESOLUTION_Y - 1 - BOX_LEN && dyBox[i] > 0) { // if at bottom edge and wants to go down
-                dyBox[i] = -1;
+            if (yCannon[i] <= 0 && dyBullets[i] < 0) { // if at top edge and wants to go up
+                dyBullets[i] = 1;
+            } else if (yCannon[i] >= RESOLUTION_Y - 1 - BOX_LEN &&
+                       dyBullets[i] > 0) { // if at bottom edge and wants to go down
+                dyBullets[i] = -1;
             }
             // update the box's location
-            xBox[i] += dxBox[i];
-            yBox[i] += dyBox[i];
+            xCannon[i] += dxBullets[i];
+            yCannon[i] += dyBullets[i];
         }
 
         wait4VSync(); // swap front and back buffers on VGA vertical sync
@@ -227,17 +233,17 @@ void clear_screen() {
     if ((back && ndrewPixelBack == 0) || (!back && ndrewPixelFront == 0)) {
         for (x = 0; x < RESOLUTION_X; x++) {
             for (y = 0; y < RESOLUTION_Y; y++) {
-                plot_pixel(x, y, BLACK);
+                plot_pixel(x, y, WHITE);
             }
         }
     }
 
     // for either back or front buffer, loop through drawn pixels, black each, and clear
-    if (back) { 
+    if (back) {
         for (i = 0; i < ndrewPixelBack; i++) {
             x = drewPixelBack[i][0];
             y = drewPixelBack[i][1];
-            plot_pixel(x, y, BLACK);
+            plot_pixel(x, y, WHITE);
             drewPixelBack[i][0] = -1;
             drewPixelBack[i][1] = -1;
         }
@@ -246,7 +252,7 @@ void clear_screen() {
         for (i = 0; i < ndrewPixelFront; i++) {
             x = drewPixelFront[i][0];
             y = drewPixelFront[i][1];
-            plot_pixel(x, y, BLACK);
+            plot_pixel(x, y, WHITE);
             drewPixelFront[i][0] = -1;
             drewPixelFront[i][1] = -1;
         }
@@ -257,4 +263,27 @@ void clear_screen() {
 void plot_pixel(int x, int y, short int line_color) {
     *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
-//
+
+void drawCannon(int x, int y, int r, double direction) {
+    int i;
+    int vX0 = x + r / 2;
+    int vY0 = y + r;
+    int vX1 = vX0 + sqrt(5) * r * cos(direction + atan(0.5));
+    int vY1 = vY0 - sqrt(5) * r * sin(direction + atan(0.5));
+    int hX = vX0 + 2 * r * cos(direction);
+    int hY = vY0 - 2 * r * sin(direction);
+    int dx = (hX - vX1) / r;
+    int dy = (hY - vY1) / r;
+    for (i = 0; i < 2 * r; i++) {
+        draw_line(vY0, vY0, vX1 + dx * i, vY1 + dy * i, BLACK);
+    }
+    for (i = 0; i < 2 * r; i++) {
+        draw_line(x, y + i, x + r, y + i, GREY);
+    }
+    /*for (i = 0; i < r; i++) {
+        draw_line(x,y+i,x+i,y+i,GREY);
+    }
+    for (i = 0; i <= r; i++) {
+        draw_line(x,y+r+i,x+r-i,y+r+i,GREY);
+    }*/
+}
