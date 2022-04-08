@@ -111,7 +111,7 @@ int main(void) {
     while (1) {
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
-        drawCannon(10, 10, 10, 0);
+        drawCannon(100, 100, 10, 0);
         // code for drawing the boxes and lines
         int j;
         for (i = 0; i < NUM_CANNONS; i++) {
@@ -265,20 +265,22 @@ void plot_pixel(int x, int y, short int line_color) {
 }
 
 void drawCannon(int x, int y, int r, double direction) {
+    direction = direction / 360 * 2 * M_PI;
     int i;
-    int vX0 = x + r / 2;
+    int vX0 = x;
     int vY0 = y + r;
-    int vX1 = vX0 + sqrt(5) * r * cos(direction + atan(0.5));
-    int vY1 = vY0 - sqrt(5) * r * sin(direction + atan(0.5));
-    int hX = vX0 + 2 * r * cos(direction);
-    int hY = vY0 - 2 * r * sin(direction);
-    int dx = (hX - vX1) / r;
-    int dy = (hY - vY1) / r;
-    for (i = 0; i < 2 * r; i++) {
-        draw_line(vY0, vY0, vX1 + dx * i, vY1 + dy * i, BLACK);
+    double vX1 = vX0 + sqrt(5) * r * cos(direction + atan(0.5));
+    double vY1 = vY0 - sqrt(5) * r * sin(direction + atan(0.5));
+    double hX = vX0 + 2 * r * cos(direction);
+    double hY = vY0 - 2 * r * sin(direction);
+    double dx = (hX - vX1) / r;
+    double dy = (hY - vY1) / r;
+    for (i = 0; i <= 2*r; i++) {
+        draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
     }
-    for (i = 0; i < 2 * r; i++) {
-        draw_line(x, y + i, x + r, y + i, GREY);
+    for (i = 0; i <= r; i++) {
+        draw_line(x + i, y - round(sqrt(pow(r, 2) - pow(i, 2))) + r, x + i, y + round(sqrt(pow(r, 2) - pow(i, 2))) + r,
+                  GREY);
     }
     /*for (i = 0; i < r; i++) {
         draw_line(x,y+i,x+i,y+i,GREY);
