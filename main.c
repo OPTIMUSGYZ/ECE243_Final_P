@@ -135,20 +135,20 @@ int main(void) {
          *
          *     c7   c8   c9
          */
-        drawCannonLeftEdge(0, RESOLUTION_Y / 3 - cannonSize, cannonSize, cannonDirections[0], cannonYes[0]);
-        drawCannonLeftEdge(0, RESOLUTION_Y / 3 * 2 - cannonSize, cannonSize, cannonDirections[1], cannonYes[1]);
-        drawCannonRightEdge(RESOLUTION_X - 1, RESOLUTION_Y / 3 - cannonSize, cannonSize, cannonDirections[2],
+        drawCannonLeftEdge(0, RESOLUTION_Y / 3 - cannonSize, cannonDirections[0], cannonYes[0]);
+        drawCannonLeftEdge(0, RESOLUTION_Y / 3 * 2 - cannonSize, cannonDirections[1], cannonYes[1]);
+        drawCannonRightEdge(RESOLUTION_X - 1, RESOLUTION_Y / 3 - cannonSize, cannonDirections[2],
                             cannonYes[2]);
-        drawCannonRightEdge(RESOLUTION_X - 1, RESOLUTION_Y / 3 * 2 - cannonSize, cannonSize, cannonDirections[3],
+        drawCannonRightEdge(RESOLUTION_X - 1, RESOLUTION_Y / 3 * 2 - cannonSize, cannonDirections[3],
                             cannonYes[3]);
-        drawCannonTopEdge(RESOLUTION_X / 4 - cannonSize, 0, cannonSize, cannonDirections[4], cannonYes[4]);
-        drawCannonTopEdge(RESOLUTION_X / 4 * 2 - cannonSize, 0, cannonSize, cannonDirections[5], cannonYes[5]);
-        drawCannonTopEdge(RESOLUTION_X / 4 * 3 - cannonSize, 0, cannonSize, cannonDirections[6], cannonYes[6]);
-        drawCannonBottomEdge(RESOLUTION_X / 4 - cannonSize, RESOLUTION_Y - 1, cannonSize, cannonDirections[7],
+        drawCannonTopEdge(RESOLUTION_X / 4 - cannonSize, 0, cannonDirections[4], cannonYes[4]);
+        drawCannonTopEdge(RESOLUTION_X / 4 * 2 - cannonSize, 0, cannonDirections[5], cannonYes[5]);
+        drawCannonTopEdge(RESOLUTION_X / 4 * 3 - cannonSize, 0, cannonDirections[6], cannonYes[6]);
+        drawCannonBottomEdge(RESOLUTION_X / 4 - cannonSize, RESOLUTION_Y - 1, cannonDirections[7],
                              cannonYes[7]);
-        drawCannonBottomEdge(RESOLUTION_X / 4 * 2 - cannonSize, RESOLUTION_Y - 1, cannonSize, cannonDirections[8],
+        drawCannonBottomEdge(RESOLUTION_X / 4 * 2 - cannonSize, RESOLUTION_Y - 1, cannonDirections[8],
                              cannonYes[8]);
-        drawCannonBottomEdge(RESOLUTION_X / 4 * 3 - cannonSize, RESOLUTION_Y - 1, cannonSize, cannonDirections[9],
+        drawCannonBottomEdge(RESOLUTION_X / 4 * 3 - cannonSize, RESOLUTION_Y - 1, cannonDirections[9],
                              cannonYes[9]);
 
 
