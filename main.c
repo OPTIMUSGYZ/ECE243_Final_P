@@ -1,5 +1,7 @@
 /* This files provides address values that exist in the system */
 
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
 #define SDRAM_BASE            0xC0000000
 #define FPGA_ONCHIP_BASE      0xC8000000
 #define FPGA_CHAR_BASE        0xC9000000
@@ -36,6 +38,7 @@
 /* Constants for animation */
 #define BOX_LEN 2
 #define NUM_CANNONS 10
+#define cannonSize 9
 
 #define FALSE 0
 #define TRUE 1
@@ -67,7 +70,15 @@ void clear_screen();
 
 void wait4VSync();
 
-void drawCannon(int x, int y, int r, double direction);
+void drawBorder();
+
+void drawCannonLeftEdge(int x, int y, double direction, int appear);
+
+void drawCannonRightEdge(int x, int y, double direction, int appear);
+
+void drawCannonTopEdge(int x, int y, double direction, int appear);
+
+void drawCannonBottomEdge(int x, int y, double direction, int appear);
 
 int main(void) {
     volatile int *pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
@@ -83,6 +94,10 @@ int main(void) {
 
     int lineColour[NUM_CANNONS], boxColour[NUM_CANNONS], dxBullets[NUM_CANNONS], dyBullets[NUM_CANNONS], xCannon[NUM_CANNONS], yCannon[NUM_CANNONS];
     short int colourArr[10] = {BLACK, YELLOW, RED, GREEN, BLUE, CYAN, MAGENTA, GREY, PINK, ORANGE};
+    //int cannonYes[10] = {TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE};
+    int cannonYes[NUM_CANNONS] = {TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE};
+    int cannonDirections[NUM_CANNONS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int d[NUM_CANNONS] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
     // initialize location and direction of rectangles
     for (i = 0; i < NUM_CANNONS; i++) {
@@ -111,7 +126,42 @@ int main(void) {
     while (1) {
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
-        drawCannon(100, 100, 10, 0);
+        /*
+         *     c4   c5   c6
+         *
+         * c0                c2
+         *
+         * c1                c3
+         *
+         *     c7   c8   c9
+         */
+        drawCannonLeftEdge(0, RESOLUTION_Y / 3 - cannonSize, cannonSize, cannonDirections[0], cannonYes[0]);
+        drawCannonLeftEdge(0, RESOLUTION_Y / 3 * 2 - cannonSize, cannonSize, cannonDirections[1], cannonYes[1]);
+        drawCannonRightEdge(RESOLUTION_X - 1, RESOLUTION_Y / 3 - cannonSize, cannonSize, cannonDirections[2],
+                            cannonYes[2]);
+        drawCannonRightEdge(RESOLUTION_X - 1, RESOLUTION_Y / 3 * 2 - cannonSize, cannonSize, cannonDirections[3],
+                            cannonYes[3]);
+        drawCannonTopEdge(RESOLUTION_X / 4 - cannonSize, 0, cannonSize, cannonDirections[4], cannonYes[4]);
+        drawCannonTopEdge(RESOLUTION_X / 4 * 2 - cannonSize, 0, cannonSize, cannonDirections[5], cannonYes[5]);
+        drawCannonTopEdge(RESOLUTION_X / 4 * 3 - cannonSize, 0, cannonSize, cannonDirections[6], cannonYes[6]);
+        drawCannonBottomEdge(RESOLUTION_X / 4 - cannonSize, RESOLUTION_Y - 1, cannonSize, cannonDirections[7],
+                             cannonYes[7]);
+        drawCannonBottomEdge(RESOLUTION_X / 4 * 2 - cannonSize, RESOLUTION_Y - 1, cannonSize, cannonDirections[8],
+                             cannonYes[8]);
+        drawCannonBottomEdge(RESOLUTION_X / 4 * 3 - cannonSize, RESOLUTION_Y - 1, cannonSize, cannonDirections[9],
+                             cannonYes[9]);
+
+
+        for (i = 0; i < NUM_CANNONS; i++) {
+            if (cannonDirections[i] == 63 && d[i] == 1) { // if at left edge and wants to go left
+                d[i] = -1;
+            } else if (cannonDirections[i] == -63 && d[i] == -1) {
+                d[i] = 1;
+            }
+            // update the box's location
+            cannonDirections[i] += d[i];
+        }
+
         // code for drawing the boxes and lines
         int j;
         for (i = 0; i < NUM_CANNONS; i++) {
@@ -264,28 +314,98 @@ void plot_pixel(int x, int y, short int line_color) {
     *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
 
-void drawCannon(int x, int y, int r, double direction) {
-    direction = direction / 360 * 2 * M_PI;
-    int i;
-    int vX0 = x;
-    int vY0 = y + r;
-    double vX1 = vX0 + sqrt(5) * r * cos(direction + atan(0.5));
-    double vY1 = vY0 - sqrt(5) * r * sin(direction + atan(0.5));
-    double hX = vX0 + 2 * r * cos(direction);
-    double hY = vY0 - 2 * r * sin(direction);
-    double dx = (hX - vX1) / r;
-    double dy = (hY - vY1) / r;
-    for (i = 0; i <= 2*r; i++) {
-        draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+void drawCannonLeftEdge(int x, int y, double direction, int appear) {
+    if (appear) {
+        direction = direction / 360 * 2 * M_PI;
+        int i;
+        int vX0 = x;
+        int vY0 = y + cannonSize;
+        double vX1 = vX0 + sqrt(5) * cannonSize * cos(direction + atan(0.5));
+        double vY1 = vY0 - sqrt(5) * cannonSize * sin(direction + atan(0.5));
+        double hX = vX0 + 2 * cannonSize * cos(direction);
+        double hY = vY0 - 2 * cannonSize * sin(direction);
+        double dx = (hX - vX1) / cannonSize;
+        double dy = (hY - vY1) / cannonSize;
+        for (i = 0; i <= 2 * cannonSize; i++) {
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+        }
+        for (i = 0; i <= cannonSize; i++) {
+            draw_line(x + i, y - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, x + i,
+                      y + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
+                      GREY);
+        }
     }
-    for (i = 0; i <= r; i++) {
-        draw_line(x + i, y - round(sqrt(pow(r, 2) - pow(i, 2))) + r, x + i, y + round(sqrt(pow(r, 2) - pow(i, 2))) + r,
-                  GREY);
-    }
-    /*for (i = 0; i < r; i++) {
-        draw_line(x,y+i,x+i,y+i,GREY);
-    }
-    for (i = 0; i <= r; i++) {
-        draw_line(x,y+r+i,x+r-i,y+r+i,GREY);
-    }*/
 }
+
+void drawCannonRightEdge(int x, int y, double direction, int appear) {
+    if (appear) {
+        int i;
+        direction = direction / 360 * 2 * M_PI;
+        int vX0 = x;
+        int vY0 = y + cannonSize;
+        double vX1 = vX0 - sqrt(5) * cannonSize * cos(direction + atan(0.5));
+        double vY1 = vY0 - sqrt(5) * cannonSize * sin(direction + atan(0.5));
+        double hX = vX0 - 2 * cannonSize * cos(direction);
+        double hY = vY0 - 2 * cannonSize * sin(direction);
+        double dx = (hX - vX1) / cannonSize;
+        double dy = (hY - vY1) / cannonSize;
+        for (i = 0; i <= 2 * cannonSize; i++) {
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+        }
+        for (i = 0; i <= cannonSize; i++) {
+            draw_line(x - i, y - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, x - i,
+                      y + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
+                      GREY);
+        }
+    }
+}
+
+void drawCannonTopEdge(int x, int y, double direction, int appear) {
+    if (appear) {
+        int i;
+        direction = (90 - direction) / 360 * 2 * M_PI;
+        int vX0 = x + cannonSize;
+        int vY0 = y;
+        double vX1 = vX0 - sqrt(5) * cannonSize * cos(direction - atan(0.5));
+        double vY1 = vY0 + sqrt(5) * cannonSize * sin(direction - atan(0.5));
+        double hX = vX0 - 2 * cannonSize * cos(direction);
+        double hY = vY0 + 2 * cannonSize * sin(direction);
+        double dx = (hX - vX1) / cannonSize;
+        double dy = (hY - vY1) / cannonSize;
+        for (i = 0; i <= 2 * cannonSize; i++) {
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+        }
+        for (i = 0; i <= cannonSize; i++) {
+            draw_line(x - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, y + i,
+                      x + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
+                      y + i,
+                      GREY);
+        }
+    }
+}
+
+void drawCannonBottomEdge(int x, int y, double direction, int appear) {
+    if (appear) {
+        int i;
+        direction = (90 - direction) / 360 * 2 * M_PI;
+        int vX0 = x + cannonSize;
+        int vY0 = y;
+        double vX1 = vX0 - sqrt(5) * cannonSize * cos(direction - atan(0.5));
+        double vY1 = vY0 - sqrt(5) * cannonSize * sin(direction - atan(0.5));
+        double hX = vX0 - 2 * cannonSize * cos(direction);
+        double hY = vY0 - 2 * cannonSize * sin(direction);
+        double dx = (hX - vX1) / cannonSize;
+        double dy = (hY - vY1) / cannonSize;
+        for (i = 0; i <= 2 * cannonSize; i++) {
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+        }
+        for (i = 0; i <= cannonSize; i++) {
+            draw_line(x - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, y - i,
+                      x + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
+                      y - i,
+                      GREY);
+        }
+    }
+}
+
+#pragma clang diagnostic pop
