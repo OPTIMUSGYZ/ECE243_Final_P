@@ -19,15 +19,16 @@
 /* VGA colors */
 #define WHITE 0xFFFF
 #define YELLOW 0xFFE0
-#define RED 0xF800
-#define GREEN 0x07E0
+#define cPlayer 0xF800
+#define cPlayerBorder 0x07E0
 #define BLUE 0x001F
 #define CYAN 0x07FF
 #define MAGENTA 0xF81F
-#define GREY 0xC618
+#define cCannonBase 0xC618
 #define PINK 0xFC18
 #define ORANGE 0xFC00
-#define BLACK 0x0000
+#define cCannonBarrel 0x0000
+#define cPlayerDeco 0x00001
 
 #define ABS(x) (((x) > 0) ? (x) : -(x))
 
@@ -39,6 +40,8 @@
 #define BOX_LEN 2
 #define NUM_CANNONS 10
 #define cannonSize 9
+#define bulletSize 10
+#define playerSize 15
 
 #define FALSE 0
 #define TRUE 1
@@ -51,6 +54,7 @@
 
 
 volatile int pixel_buffer_start; // global variable
+volatile int display[RESOLUTION_X][RESOLUTION_Y];
 // 2 sets of drewPixel for front and back buffer
 volatile int drewPixelBack[RESOLUTION_X * RESOLUTION_Y][2];
 volatile int drewPixelFront[RESOLUTION_X * RESOLUTION_Y][2];
@@ -70,7 +74,7 @@ void clear_screen();
 
 void wait4VSync();
 
-void drawBorder();
+void drawLaserBorder();
 
 void drawCannonLeftEdge(int x, int y, double direction, int appear);
 
@@ -79,6 +83,8 @@ void drawCannonRightEdge(int x, int y, double direction, int appear);
 void drawCannonTopEdge(int x, int y, double direction, int appear);
 
 void drawCannonBottomEdge(int x, int y, double direction, int appear);
+
+void drawPlayer(int x, int y);
 
 int main(void) {
     volatile int *pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
@@ -93,7 +99,7 @@ int main(void) {
     }
 
     int lineColour[NUM_CANNONS], boxColour[NUM_CANNONS], dxBullets[NUM_CANNONS], dyBullets[NUM_CANNONS], xCannon[NUM_CANNONS], yCannon[NUM_CANNONS];
-    short int colourArr[10] = {BLACK, YELLOW, RED, GREEN, BLUE, CYAN, MAGENTA, GREY, PINK, ORANGE};
+    short int colourArr[10] = {cCannonBarrel, YELLOW, cPlayer, cPlayerBorder, BLUE, CYAN, MAGENTA, cCannonBase, PINK, ORANGE};
     //int cannonYes[10] = {TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE};
     int cannonYes[NUM_CANNONS] = {TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE};
     int cannonDirections[NUM_CANNONS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -122,10 +128,11 @@ int main(void) {
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
     int x0, x1, y0, y1;
-    // remember to change to 1
     while (1) {
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
+        drawPlayer(100, 100);
+        //drawLaserBorder();
         /*
          *     c4   c5   c6
          *
@@ -200,6 +207,7 @@ int main(void) {
         wait4VSync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
         back = !back;
+        printf("???: %d",display[100][100]);
     }
 }
 
@@ -246,34 +254,34 @@ void draw_line(int x0, int y0, int x1, int y1, short int colour) {
     for (x = x0; x <= x1; x++) {
         if (is_steep) {
             plot_pixel(y, x, colour);
-            if (back) {
-                drewPixelBack[ndrewPixelBack][0] = y;
-                drewPixelBack[ndrewPixelBack][1] = x;
-            } else {
-                drewPixelFront[ndrewPixelFront][0] = y;
-                drewPixelFront[ndrewPixelFront][1] = x;
-            }
+//            if (back) {
+//                drewPixelBack[ndrewPixelBack][0] = y;
+//                drewPixelBack[ndrewPixelBack][1] = x;
+//            } else {
+//                drewPixelFront[ndrewPixelFront][0] = y;
+//                drewPixelFront[ndrewPixelFront][1] = x;
+//            }
         } else {
             plot_pixel(x, y, colour);
             // add pixel to corresponding drewPixel
-            if (back) {
-                drewPixelBack[ndrewPixelBack][0] = x;
-                drewPixelBack[ndrewPixelBack][1] = y;
-            } else {
-                drewPixelFront[ndrewPixelFront][0] = x;
-                drewPixelFront[ndrewPixelFront][1] = y;
-            }
+//            if (back) {
+//                drewPixelBack[ndrewPixelBack][0] = x;
+//                drewPixelBack[ndrewPixelBack][1] = y;
+//            } else {
+//                drewPixelFront[ndrewPixelFront][0] = x;
+//                drewPixelFront[ndrewPixelFront][1] = y;
+//            }
         }
         error += dY;
         if (error > 0) {
             y += y_step;
             error -= dX;
         }
-        if (back) {
-            ndrewPixelBack += 1;
-        } else {
-            ndrewPixelFront += 1;
-        }
+//        if (back) {
+//            ndrewPixelBack += 1;
+//        } else {
+//            ndrewPixelFront += 1;
+//        }
     }
 }
 
@@ -284,11 +292,12 @@ void clear_screen() {
         for (x = 0; x < RESOLUTION_X; x++) {
             for (y = 0; y < RESOLUTION_Y; y++) {
                 plot_pixel(x, y, WHITE);
+                display[x][y] = WHITE;
             }
         }
     }
 
-    // for either back or front buffer, loop through drawn pixels, black each, and clear
+    // for either back or front buffer, loop through drawn pixels, white each, and clear
     if (back) {
         for (i = 0; i < ndrewPixelBack; i++) {
             x = drewPixelBack[i][0];
@@ -296,6 +305,7 @@ void clear_screen() {
             plot_pixel(x, y, WHITE);
             drewPixelBack[i][0] = -1;
             drewPixelBack[i][1] = -1;
+            display[x][y] = WHITE;
         }
         ndrewPixelBack = 0; // reset counter
     } else {
@@ -305,12 +315,28 @@ void clear_screen() {
             plot_pixel(x, y, WHITE);
             drewPixelFront[i][0] = -1;
             drewPixelFront[i][1] = -1;
+            display[x][y] = WHITE;
         }
         ndrewPixelFront = 0; // reset counter
     }
 }
 
 void plot_pixel(int x, int y, short int line_color) {
+    if (line_color != (short) WHITE) {
+        if (back) {
+            drewPixelBack[ndrewPixelBack][0] = x;
+            drewPixelBack[ndrewPixelBack][1] = y;
+        } else {
+            drewPixelFront[ndrewPixelFront][0] = x;
+            drewPixelFront[ndrewPixelFront][1] = y;
+        }
+        if (back) {
+            ndrewPixelBack += 1;
+        } else {
+            ndrewPixelFront += 1;
+        }
+    }
+    display[x][y] = line_color;
     *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
 
@@ -327,12 +353,12 @@ void drawCannonLeftEdge(int x, int y, double direction, int appear) {
         double dx = (hX - vX1) / cannonSize;
         double dy = (hY - vY1) / cannonSize;
         for (i = 0; i <= 2 * cannonSize; i++) {
-            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), cCannonBarrel);
         }
         for (i = 0; i <= cannonSize; i++) {
             draw_line(x + i, y - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, x + i,
                       y + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
-                      GREY);
+                      cCannonBase);
         }
     }
 }
@@ -350,12 +376,12 @@ void drawCannonRightEdge(int x, int y, double direction, int appear) {
         double dx = (hX - vX1) / cannonSize;
         double dy = (hY - vY1) / cannonSize;
         for (i = 0; i <= 2 * cannonSize; i++) {
-            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), cCannonBarrel);
         }
         for (i = 0; i <= cannonSize; i++) {
             draw_line(x - i, y - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, x - i,
                       y + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
-                      GREY);
+                      cCannonBase);
         }
     }
 }
@@ -373,13 +399,13 @@ void drawCannonTopEdge(int x, int y, double direction, int appear) {
         double dx = (hX - vX1) / cannonSize;
         double dy = (hY - vY1) / cannonSize;
         for (i = 0; i <= 2 * cannonSize; i++) {
-            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), cCannonBarrel);
         }
         for (i = 0; i <= cannonSize; i++) {
             draw_line(x - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, y + i,
                       x + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
                       y + i,
-                      GREY);
+                      cCannonBase);
         }
     }
 }
@@ -397,13 +423,54 @@ void drawCannonBottomEdge(int x, int y, double direction, int appear) {
         double dx = (hX - vX1) / cannonSize;
         double dy = (hY - vY1) / cannonSize;
         for (i = 0; i <= 2 * cannonSize; i++) {
-            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), BLACK);
+            draw_line(vX0, vY0, round(vX1 + dx * i), round(vY1 + dy * i), cCannonBarrel);
         }
         for (i = 0; i <= cannonSize; i++) {
             draw_line(x - round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize, y - i,
                       x + round(sqrt(pow(cannonSize, 2) - pow(i, 2))) + cannonSize,
                       y - i,
-                      GREY);
+                      cCannonBase);
+        }
+    }
+}
+
+void drawLaserBorder() {
+    draw_line(sqrt(5) * cannonSize + 1, sqrt(5) * cannonSize + 1, RESOLUTION_X - sqrt(5) * cannonSize - 2,
+              sqrt(5) * cannonSize + 1, cPlayer);
+    draw_line(sqrt(5) * cannonSize + 1, RESOLUTION_Y - sqrt(5) * cannonSize - 2,
+              RESOLUTION_X - sqrt(5) * cannonSize - 2,
+              RESOLUTION_Y - sqrt(5) * cannonSize - 2, cPlayer);
+    draw_line(sqrt(5) * cannonSize + 1, sqrt(5) * cannonSize + 1, sqrt(5) * cannonSize + 1,
+              RESOLUTION_Y - sqrt(5) * cannonSize - 2, cPlayer);
+    draw_line(RESOLUTION_X - sqrt(5) * cannonSize - 2, sqrt(5) * cannonSize + 1,
+              RESOLUTION_X - sqrt(5) * cannonSize - 2,
+              RESOLUTION_Y - sqrt(5) * cannonSize - 2, cPlayer);
+}
+
+void drawPlayer(int x, int y) {
+    int borderWidth = round(playerSize / 7);
+    int i, j, k, l;
+    for (i = 0; i < borderWidth; i++) {
+        draw_line(x + i, y + i, x + playerSize - 1 - i, y + i, cPlayerBorder);
+        draw_line(x + i, y + playerSize - 1 - i, x + playerSize - 1 - i, y + playerSize - 1 - i, cPlayerBorder);
+        draw_line(x + i, y + i, x + i, y + playerSize - 1 - i, cPlayerBorder);
+        draw_line(x + playerSize - 1 - i, y + i, x + playerSize - 1 - i, y + playerSize - 1 - i, cPlayerBorder);
+    }
+    for (i = 0; i < playerSize - borderWidth * 2; i++) {
+        draw_line(x + borderWidth, y + borderWidth + i, x + playerSize - 1 - borderWidth, y + borderWidth + i, cPlayer);
+    }
+    int seedRow = 2;
+    int seedWidth = borderWidth;
+    int dSeed = round((playerSize - borderWidth * 2 - seedRow * seedWidth) / (seedRow + 1));
+    for (i = 0; i < seedRow; i++) {
+        for (j = 0; j < seedRow; j++) {
+            for (k = 0; k < seedWidth; k++) {
+                for (l = 0; l < seedWidth; l++) {
+                    plot_pixel(x + borderWidth + (i + 1) * dSeed + i * seedWidth + k,
+                               y + borderWidth + (j + 1) * dSeed + j * seedWidth + l,
+                               cPlayerDeco);
+                }
+            }
         }
     }
 }
