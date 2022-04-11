@@ -103,7 +103,7 @@
 
 
 volatile int pixel_buffer_start; // global variable
-volatile short int display[RESOLUTION_X][RESOLUTION_Y];
+volatile short int display[RESOLUTION_Y][RESOLUTION_X];
 // 2 sets of drewPixel for front and back buffer
 volatile int drewPixelBack[RESOLUTION_X * RESOLUTION_Y][2];
 volatile int drewPixelFront[RESOLUTION_X * RESOLUTION_Y][2];
@@ -115,6 +115,8 @@ void draw_line(int x0, int y0, int x1, int y1, short int colour);
 volatile int ndrewPixelBack = 0;
 volatile int ndrewPixelFront = 0;
 
+volatile int dead = 0;
+
 void swap(int *a, int *b);
 
 void plot_pixel(int x, int y, short int line_color);
@@ -122,8 +124,6 @@ void plot_pixel(int x, int y, short int line_color);
 void clear_screen();
 
 void wait4VSync();
-
-void drawLaserBorder();
 
 void drawCannonLeftEdge(int x, int y, double direction, int appear);
 
@@ -137,25 +137,13 @@ void drawPlayer(int x, int y);
 
 void drawBullet(int x, int y, int appear);
 
-void config_GIC();
-
-void config_interrupt(int N, int CPU_target);
+int drawing = 1;
 
 int main(void) {
-    volatile int *pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
-
-    // clear drewPixelBack&2
+    volatile int *pixel_ctrl_ptr;
+    if (drawing)
+        pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
     int i;
-    for (i = 0; i < RESOLUTION_X * RESOLUTION_Y; i++) {
-        drewPixelBack[i][0] = -1;
-        drewPixelBack[i][1] = -1;
-        drewPixelFront[i][0] = -1;
-        drewPixelFront[i][1] = -1;
-    }
-
-    int lineColour[NUM_CANNONS], boxColour[NUM_CANNONS], dxBullets[NUM_CANNONS], dyBullets[NUM_CANNONS], xCannon[NUM_CANNONS], yCannon[NUM_CANNONS];
-    short int colourArr[10] = {cCannonBarrel, YELLOW, cPlayer, cPlayerBorder, BLUE, CYAN, MAGENTA, cCannonBase, cBullet,
-                               ORANGE};
     /*
          *     c4   c5   c6
          *
@@ -177,39 +165,42 @@ int main(void) {
     int cannonDirections[NUM_CANNONS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     int d[NUM_CANNONS] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
-    // initialize location and direction of rectangles
-    for (i = 0; i < NUM_CANNONS; i++) {
-        boxColour[i] = colourArr[rand() % 10];
-        lineColour[i] = colourArr[rand() % 10];
-        xCannon[i] = rand() % RESOLUTION_X;
-        yCannon[i] = rand() % RESOLUTION_Y;
-        dxBullets[i] = rand() % 2 * 2 - 1;
-        dyBullets[i] = rand() % 2 * 2 - 1;
-    }
-
     /* set front pixel buffer to start of FPGA On-chip memory */
-    *(pixel_ctrl_ptr + 1) = FPGA_ONCHIP_BASE; // first store the address in the back buffer
+    if (drawing)
+        *(pixel_ctrl_ptr + 1) = FPGA_ONCHIP_BASE; // first store the address in the back buffer
     /* now, swap the front/back buffers, to set the front buffer location */
-    wait4VSync();
+    if (drawing)
+        wait4VSync();
     /* initialize a pointer to the pixel buffer, used by drawing functions */
-    pixel_buffer_start = *pixel_ctrl_ptr;
+    if (drawing)
+        pixel_buffer_start = *pixel_ctrl_ptr;
     clear_screen(); // pixel_buffer_start points to the pixel buffer
     /* set back pixel buffer to start of SDRAM memory */
-    *(pixel_ctrl_ptr + 1) = SDRAM_BASE;
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
+    if (drawing)
+        *(pixel_ctrl_ptr + 1) = SDRAM_BASE;
+    if (drawing)
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
-    int x0, x1, y0, y1;
     int playerX = RESOLUTION_X / 2 - 1, playerY = RESOLUTION_Y / 2 - 1;
-//    int yes=1;
+    int dxPlayer = 1, dyPlayer = 1;
     while (1) {
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
         drawPlayer(playerX, playerY);
-        //drawLaserBorder();
         for (i = 0; i < NUM_CANNONS; i++) {
-            cannonDirections[i] = atan((cannonY[i] - playerY) / (cannonX[i] - playerX)) / 2 / M_PI * 360;
-            printf("%d ",cannonDirections[i]);
+            if (i < 4) {
+                cannonDirections[i] =
+                        atan(((double) (playerY - cannonY[i]) / (double) (playerX - cannonX[i]))) / M_PI * 180;
+            } else {
+                cannonDirections[i] =
+                        atan(((double) (playerX - cannonX[i]) / (double) (playerY - cannonY[i]))) / M_PI * 180;
+            }
+            if (cannonDirections[i] > 63) {
+                cannonDirections[i] = 63;
+            } else if (cannonDirections[i] < -63) {
+                cannonDirections[i] = -63;
+            }
         }
         drawCannonLeftEdge(cannonX[0], cannonY[0], cannonDirections[0], cannonYes[0]);
         drawCannonLeftEdge(cannonX[1], cannonY[1], cannonDirections[1], cannonYes[1]);
@@ -226,57 +217,52 @@ int main(void) {
         drawBullet(150, 150, 1);
 
 
-
-
-
-        // code for drawing the boxes and lines
         int j;
-        for (i = 0; i < NUM_CANNONS; i++) {
-            x0 = xCannon[i];
-            y0 = yCannon[i];
-            x1 = xCannon[(i + 1) % NUM_CANNONS];
-            y1 = yCannon[(i + 1) % NUM_CANNONS];
-            draw_line(x0, y0, x1, y1, lineColour[i]);
-            // boxes are drawn at the bottom right of the line's end point
-            for (j = 0; j <= BOX_LEN; j++) {
-                x1 = x0 + BOX_LEN;
-                y1 = y0;
-                draw_line(x0, y0, x1, y1, boxColour[i]);
-                y0 += 1;
+//        int k;
+        for (i = 0; i < playerSize && !dead; i++) {
+            for (j = 0; j < playerSize && !dead; j++) {
+//                printf("px:%d, py:%d, i:%d, j:%d, d:%d\n", playerX, playerY, i, j, display[playerY + i][playerX + j]);
+                if (display[playerY + i][playerX + j]) {
+                    dead = 1;
+//                    for (k = 0; k < playerSize; k++) {
+//                        draw_line(playerX, playerY + k, playerX + playerSize - 1, playerY + k, MAGENTA);
+//                    }
+                    printf("Dead at: (%d, %d)", playerX + j, playerY + i);
+                }
             }
         }
-        // code for updating the locations of boxes
-        for (i = 0; i < NUM_CANNONS; i++) {
-            if (xCannon[i] <= 0 && dxBullets[i] < 0) { // if at left edge and wants to go left
-                dxBullets[i] = 1;
-            } else if (xCannon[i] >= RESOLUTION_X - 1 - BOX_LEN &&
-                       dxBullets[i] > 0) { // if at right edge and wants to go right
-                dxBullets[i] = -1;
-            }
-            if (yCannon[i] <= 0 && dyBullets[i] < 0) { // if at top edge and wants to go up
-                dyBullets[i] = 1;
-            } else if (yCannon[i] >= RESOLUTION_Y - 1 - BOX_LEN &&
-                       dyBullets[i] > 0) { // if at bottom edge and wants to go down
-                dyBullets[i] = -1;
-            }
-            // update the box's location
-            xCannon[i] += dxBullets[i];
-            yCannon[i] += dyBullets[i];
+        if (playerX <= 0 && dxPlayer < 0) {
+            dxPlayer = 1;
+        } else if (playerX >= RESOLUTION_X - 1 - playerSize && dxPlayer > 0) {
+            dxPlayer = -1;
         }
+        if (playerY <= 0 && dyPlayer < 0) {
+            dyPlayer = 1;
+        } else if (playerY >= RESOLUTION_Y - 1 - playerSize && dyPlayer > 0) {
+            dyPlayer = -1;
+        }
+        playerX += dxPlayer;
+        playerY += dyPlayer;
 
-        wait4VSync(); // swap front and back buffers on VGA vertical sync
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        if (dead) {
+            if (!drawing) {
+                FILE *f = fopen("test.txt", "w");
+                for (i = 0; i < RESOLUTION_X; i++) {
+                    for (j = 0; j < RESOLUTION_Y; j++) {
+                        fprintf(f, "%d ", display[i][j]);
+                    }
+                    fprintf(f, "\n");
+                }
+                exit(0);
+            }
+
+            while (1);
+        }
+        if (drawing)
+            wait4VSync(); // swap front and back buffers on VGA vertical sync
+        if (drawing)
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
         back = !back;
-//        if (yes) {
-//            FILE *f = fopen("test.txt","w");
-//            for (i = 0; i < RESOLUTION_X; i++) {
-//                for (j = 0; j < RESOLUTION_Y; j++) {
-//                    fprintf(f,"%d ", display[i][j]);
-//                }
-//                fprintf(f,"\n");
-//            }
-//            yes = 1;
-//        }
     }
 }
 
@@ -402,17 +388,23 @@ void plot_pixel(int x, int y, short int line_color) {
             ndrewPixelFront += 1;
         }
     }
-//    if (line_color != (short) WHITE) {
-//        display[x][y] = 1;
-//    } else {
-//        display[x][y] = 0;
-//    }
-    *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
+    //display[y][x] = line_color;
+    if (line_color == (short) WHITE || line_color == (short) cPlayer || line_color == (short) cPlayerDeco ||
+        line_color == (short) cPlayerBorder) {
+        display[y][x] = 0;
+    } else if (line_color == (short) MAGENTA) {
+        display[y][x] = 2;
+    } else {
+        display[y][x] = 1;
+    }
+
+    if (drawing)
+        *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
 
 void drawCannonLeftEdge(int x, int y, double direction, int appear) {
     if (appear) {
-        direction = direction / 360 * 2 * M_PI;
+        direction = -direction / 360 * 2 * M_PI;
         int i;
         int vX0 = x;
         int vY0 = y + cannonSize;
@@ -459,7 +451,7 @@ void drawCannonRightEdge(int x, int y, double direction, int appear) {
 void drawCannonTopEdge(int x, int y, double direction, int appear) {
     if (appear) {
         int i;
-        direction = (90 - direction) / 360 * 2 * M_PI;
+        direction = (90 + direction) / 360 * 2 * M_PI;
         int vX0 = x + cannonSize;
         int vY0 = y;
         double vX1 = vX0 - sqrt(5) * cannonSize * cos(direction - atan(0.5));
@@ -502,19 +494,6 @@ void drawCannonBottomEdge(int x, int y, double direction, int appear) {
                       cCannonBase);
         }
     }
-}
-
-void drawLaserBorder() {
-    draw_line(sqrt(5) * cannonSize + 1, sqrt(5) * cannonSize + 1, RESOLUTION_X - sqrt(5) * cannonSize - 2,
-              sqrt(5) * cannonSize + 1, cPlayer);
-    draw_line(sqrt(5) * cannonSize + 1, RESOLUTION_Y - sqrt(5) * cannonSize - 2,
-              RESOLUTION_X - sqrt(5) * cannonSize - 2,
-              RESOLUTION_Y - sqrt(5) * cannonSize - 2, cPlayer);
-    draw_line(sqrt(5) * cannonSize + 1, sqrt(5) * cannonSize + 1, sqrt(5) * cannonSize + 1,
-              RESOLUTION_Y - sqrt(5) * cannonSize - 2, cPlayer);
-    draw_line(RESOLUTION_X - sqrt(5) * cannonSize - 2, sqrt(5) * cannonSize + 1,
-              RESOLUTION_X - sqrt(5) * cannonSize - 2,
-              RESOLUTION_Y - sqrt(5) * cannonSize - 2, cPlayer);
 }
 
 void drawPlayer(int x, int y) {
@@ -577,38 +556,6 @@ void drawBullet(int x, int y, int appear) {
             }
         }
     }
-}
-
-/*
-* Configure the Generic Interrupt Controller (GIC) */
-void config_GIC() {
-    config_interrupt(73, 1); // configure the KEYs parallel port (Interrupt ID = 73)
-// Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all priorities
-    *((int *) 0xFFFEC104) = 0xFFFF;
-// Set CPU Interface Control Register (ICCICR). Enable signaling of interrupts
-    *((int *) 0xFFFEC100) = 1;
-// Configure the Distributor Control Register (ICDDCR) to send pending interrupts to CPUs
-    *((int *) 0xFFFED000) = 1;
-}
-
-/*
-* Configure Set Enable Registers (ICDISERn) and Interrupt Processor Target Registers (ICDIPTRn). * The default (reset) values are used for other registers in the GIC.
-*/
-void config_interrupt(int N, int CPU_target) {
-    int reg_offset, index, value, address;
-/* Configure the Interrupt Set-Enable Registers (ICDISERn). * reg_offset = (integer_div(N / 32) * 4
-* value = 1 << (N mod 32) */
-    reg_offset = (N >> 3) & 0xFFFFFFFC;
-    index = N & 0x1F;
-    value = 0x1 << index;
-    address = 0xFFFED100 + reg_offset;
-/* Now that we know the register address and value, set the appropriate bit */ *(int *) address |= value;
-/* Configure the Interrupt Processor Targets Register (ICDIPTRn) * reg_offset = integer_div(N / 4) * 4
-* index = N mod 4 */
-    reg_offset = (N & 0xFFFFFFFC);
-    index = N & 0x3;
-    address = 0xFFFED800 + reg_offset + index;
-/* Now that we know the register address and value, write to (only) the appropriate byte */ *(char *) address = (char) CPU_target;
 }
 
 #pragma clang diagnostic pop
