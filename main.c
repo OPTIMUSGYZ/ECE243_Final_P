@@ -3,7 +3,7 @@
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 int drawing = 1;
-int canDie = 0;
+int canDie = 1;
 #define BOARD                 "DE1-SoC"
 
 /* Memory */
@@ -90,10 +90,10 @@ int canDie = 0;
 #define DIAGONAL_LENGTH 400
 
 /* Constants for animation */
-#define BOX_LEN 2
 #define NUM_CANNONS 10
 #define cannonSize 9
 #define playerSize 15
+#define difficultyIncrInterval 1
 
 #define FALSE 0
 #define TRUE 1
@@ -102,8 +102,8 @@ int canDie = 0;
 #include <stdio.h>
 #include <math.h>
 
-// Begin part3.c code for Lab 7
-
+int seg7[] = {0b0111111, 0b0000110, 0b1011011, 0b1001111, 0b1100110, 0b1101101, 0b1111101, 0b0000111, 0b1111111,
+              0b1101111};
 
 volatile int pixel_buffer_start; // global variable
 volatile int displayFront[RESOLUTION_Y][RESOLUTION_X];
@@ -120,9 +120,15 @@ volatile int ndrewPixelBack = 0;
 volatile int ndrewPixelFront = 0;
 
 volatile int dead = 0;
-volatile int count = 0;
+volatile int time = 0;
 
 int bulletSize = cannonSize - 1;
+
+volatile int bulletSpeed = 3;
+volatile int cannonYes[NUM_CANNONS];
+volatile int xPathBullet[NUM_CANNONS][DIAGONAL_LENGTH], yPathBullet[NUM_CANNONS][DIAGONAL_LENGTH];
+
+volatile int playerX = RESOLUTION_X / 2 - 1, playerY = RESOLUTION_Y / 2 - 1;
 
 void swap(int *a, int *b);
 
@@ -148,14 +154,44 @@ void computeBulletPath(int bulletX, int bulletY, int playerX, int playerY, int b
                        int bulletPathX[NUM_CANNONS][DIAGONAL_LENGTH],
                        int bulletPathY[NUM_CANNONS][DIAGONAL_LENGTH], int speed);
 
-int countOccurances(int arr[], int n, int item);
+void disable_A9_interrupts();
+
+void set_A9_IRQ_stack();
+
+void config_GIC();
+
+void config_KEYs();
+
+void config_A9_private_timer();
+
+void enable_A9_interrupts();
+
+void stopTimer();
+
+void displayLose();
+
+void displayTimer();
+
+void clearHEX();
 
 int main(void) {
+    disable_A9_interrupts(); // disable interrupts in the A9 processor
+    set_A9_IRQ_stack();
+    config_GIC();
+    config_KEYs();
+    config_A9_private_timer();
+    // initialize the stack pointer for IRQ mode
+    // configure the general interrupt controller
+    // configure pushbutton KEYs to generate interrupts
+    enable_A9_interrupts(); // enable interrupts in the A9 processor while (1) // wait for an interrupt
     volatile int *pixel_ctrl_ptr;
     if (drawing)
         pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
-    int i, j, k;
-    int remainingBullets = 0;
+    volatile int i, j;
+//    cannonYes[0] = 1;
+    for (i = 0; i < NUM_CANNONS; i++) {
+        cannonYes[i] = 0;
+    }
     /*
          *     c4   c5   c6
          *
@@ -172,11 +208,29 @@ int main(void) {
     int cannonY[NUM_CANNONS] = {RESOLUTION_Y / 3 - cannonSize, RESOLUTION_Y / 3 * 2 - cannonSize,
                                 RESOLUTION_Y / 3 - cannonSize, RESOLUTION_Y / 3 * 2 - cannonSize, 0, 0, 0,
                                 RESOLUTION_Y - 1, RESOLUTION_Y - 1, RESOLUTION_Y - 1};
-    //int cannonYes[10] = {TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE};
-    int cannonYes[NUM_CANNONS] = {TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE};
+
     int cannonDirections[NUM_CANNONS];
-    int bulletYes[NUM_CANNONS] = {cannonYes[0], cannonYes[1], cannonYes[2], cannonYes[3], cannonYes[4], cannonYes[5],
-                                  cannonYes[6], cannonYes[7], cannonYes[8], cannonYes[9]};
+    // {bulletYes,cannonYes,count}
+    /*int bulletYes[NUM_CANNONS][2] = {{cannonYes[0], cannonYes[0]},
+                                     {cannonYes[1], cannonYes[1]},
+                                     {cannonYes[2], cannonYes[2]},
+                                     {cannonYes[3], cannonYes[3]},
+                                     {cannonYes[4], cannonYes[4]},
+                                     {cannonYes[5], cannonYes[5]},
+                                     {cannonYes[6], cannonYes[6]},
+                                     {cannonYes[7], cannonYes[7]},
+                                     {cannonYes[8], cannonYes[8]},
+                                     {cannonYes[9], cannonYes[9]}};*/
+    int bulletYes[NUM_CANNONS][3] = {{0, cannonYes[0], 0},
+                                     {0, cannonYes[1], 0},
+                                     {0, cannonYes[2], 0},
+                                     {0, cannonYes[3], 0},
+                                     {0, cannonYes[4], 0},
+                                     {0, cannonYes[5], 0},
+                                     {0, cannonYes[6], 0},
+                                     {0, cannonYes[7], 0},
+                                     {0, cannonYes[8], 0},
+                                     {0, cannonYes[9], 0}};
     int initBulletX[NUM_CANNONS] = {cannonX[0], cannonX[1],
 
                                     cannonX[2] - bulletSize + 1, cannonX[3] - bulletSize + 1,
@@ -218,7 +272,7 @@ int main(void) {
                                 cannonY[4], cannonY[5], cannonY[6],
 
                                 cannonY[7] - bulletSize + 1, cannonY[8] - bulletSize + 1, cannonY[9] - bulletSize + 1};
-    int xPathBullet[NUM_CANNONS][DIAGONAL_LENGTH], yPathBullet[NUM_CANNONS][DIAGONAL_LENGTH];
+
     for (i = 0; i < NUM_CANNONS; i++) {
         for (j = 0; j < DIAGONAL_LENGTH; j++) {
             xPathBullet[i][j] = -1;
@@ -243,9 +297,20 @@ int main(void) {
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
-    int playerX = RESOLUTION_X / 2 - 1, playerY = RESOLUTION_Y / 2 - 1;
     int dxPlayer = 1, dyPlayer = 1;
     while (1) {
+        if (time > 0 && time <= difficultyIncrInterval * NUM_CANNONS) {
+            i = (time - 1) / difficultyIncrInterval;
+            cannonYes[i] = 1;
+            time = i * difficultyIncrInterval + 1;
+        } else {
+            if (time > 0 && !(time % difficultyIncrInterval)) {
+                if (bulletSpeed < 20) {
+                    bulletSpeed++;
+                }
+            }
+        }
+        printf("time: %d, speed: %d\n", time, bulletSpeed);
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
         drawPlayer(playerX, playerY);
@@ -263,37 +328,33 @@ int main(void) {
                 } else if (cannonDirections[i] < -63) {
                     cannonDirections[i] = -63;
                 }
-                if (!remainingBullets)
-                    computeBulletPath(bulletX[i], bulletY[i], playerX, playerY, i, xPathBullet, yPathBullet, 2);
-            }
-        }
-        if (!drawing) {
-            FILE *g = fopen("test1.txt", "w");
-            for (i = 0; i < NUM_CANNONS; i++) {
-                fprintf(g, "%d: ", i);
-                for (j = 0; j < DIAGONAL_LENGTH; j++) {
-                    if (xPathBullet[i][j] != -1 && yPathBullet[i][j] != -1)
-                        fprintf(g, "(%d,%d) ", xPathBullet[i][j], yPathBullet[i][j]);
+                if (!bulletYes[i][0]) {
+                    computeBulletPath(bulletX[i], bulletY[i], playerX, playerY, i, xPathBullet, yPathBullet,
+                                      bulletSpeed);
+                    bulletYes[i][0] = cannonYes[i];
                 }
-                fprintf(g, "\n\n");
             }
+            bulletYes[i][1] = cannonYes[i];
         }
 
         for (i = 0; i < NUM_CANNONS; i++) {
-            drawBullet(bulletX[i], bulletY[i], bulletYes[i]);
-            if (xPathBullet[i][count] != -1 && yPathBullet[i][count] != -1) {
-                bulletX[i] = xPathBullet[i][count];
-                bulletY[i] = yPathBullet[i][count];
+            drawBullet(bulletX[i], bulletY[i], bulletYes[i][1]);
+            if (xPathBullet[i][bulletYes[i][2]] != -1 && yPathBullet[i][bulletYes[i][2]] != -1) {
+                bulletX[i] = xPathBullet[i][bulletYes[i][2]];
+                bulletY[i] = yPathBullet[i][bulletYes[i][2]];
+                bulletYes[i][2] += 1;
             } else {
-                bulletYes[i] = 0;
+                bulletYes[i][0] = 0;
+                bulletYes[i][1] = 0;
+                bulletYes[i][2] = 0;
             }
         }
-        remainingBullets = countOccurances(bulletYes, NUM_CANNONS, TRUE);
-        if (remainingBullets) {
-            count++;
-        } else {
-            for (i = 0; i < NUM_CANNONS; i++) {
-                bulletYes[i] = cannonYes[i];
+        if (time > 99) {
+            while (1);
+        }
+
+        for (i = 0; i < NUM_CANNONS; i++) {
+            if (!bulletYes[i][0]) {
                 bulletX[i] = initBulletX[i];
                 bulletY[i] = initBulletY[i];
                 for (j = 0; j < DIAGONAL_LENGTH; j++) {
@@ -301,7 +362,6 @@ int main(void) {
                     yPathBullet[i][j] = -1;
                 }
             }
-            count = 0;
         }
         drawCannonLeftEdge(cannonX[0], cannonY[0], cannonDirections[0], cannonYes[0]);
         drawCannonLeftEdge(cannonX[1], cannonY[1], cannonDirections[1], cannonYes[1]);
@@ -326,9 +386,6 @@ int main(void) {
                     }
                     if (shouldBeDead) {
                         dead = 1;
-                        for (k = 0; k < playerSize; k++) {
-                            draw_line(playerX, playerY + k, playerX + playerSize - 1, playerY + k, MAGENTA);
-                        }
                         printf("Dead at: (%d, %d)", playerX + j, playerY + i);
                     }
                 }
@@ -364,8 +421,12 @@ int main(void) {
                 }
                 exit(0);
             }
-
-            while (1);
+            stopTimer();
+            while (dead) {
+                displayLose();
+            }
+            clearHEX();
+            displayTimer();
         }
         if (drawing)
             wait4VSync(); // swap front and back buffers on VGA vertical sync
@@ -684,13 +745,210 @@ void computeBulletPath(int bulletX, int bulletY, int playerX, int playerY, int b
     }
 }
 
-int countOccurances(int arr[], int n, int item) {
-    int i, o = 0;
-    for (i = 0; i < n; i++) {
-        if (arr[i] == item)
-            o++;
+/* setup the KEY interrupts in the FPGA */
+void config_KEYs() {
+    volatile int *KEY_ptr = (int *) KEY_BASE; // pushbutton KEY base address
+    *(KEY_ptr + 2) = 0xF; // enable interrupts for the two KEYs
+}
+
+void config_A9_private_timer() {
+    volatile int *A9_private_timer_ptr = (int *) MPCORE_PRIV_TIMER;
+    int count = 200 * pow(10, 6);
+    *A9_private_timer_ptr = count;
+    *(A9_private_timer_ptr + 2) = 0b111;
+}
+
+/* This file:
+ * 1. defines exception vectors for the A9 processor
+ * 2. provides code that sets the IRQ mode stack, and that dis/enables
+ * interrupts
+ * 3. provides code that initializes the generic interrupt controller
+*/
+void pushbutton_ISR();
+
+void A9_private_timer_ISR();
+
+void config_interrupt(int, int);
+
+// Define the IRQ exception handler
+void __attribute__((interrupt)) __cs3_isr_irq() {
+// Read the ICCIAR from the CPU Interface in the GIC
+    int interrupt_ID = *((int *) (MPCORE_GIC_CPUIF + ICCIAR));
+    if (interrupt_ID == 73) // check if interrupt is from the KEYs
+        pushbutton_ISR();
+    else if (interrupt_ID == 29)
+        A9_private_timer_ISR();
+    else
+        while (1); // if unexpected, then stay here
+    // Write to the End of Interrupt Register (ICCEOIR)
+    *((int *) (MPCORE_GIC_CPUIF + ICCEOIR)) = interrupt_ID;
+}
+
+// Define the remaining exception handlers
+void __attribute__((interrupt)) __cs3_reset() {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_undef() {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_swi() {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_pabort() {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_dabort() {
+    while (1);
+}
+
+void __attribute__((interrupt)) __cs3_isr_fiq() {
+    while (1);
+}
+
+/*
+ * Turn off interrupts in the ARM processor
+*/
+void disable_A9_interrupts() {
+    int status = 0b11010011;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(status));
+}
+
+/*
+ * Initialize the banked stack pointer register for IRQ mode
+*/
+void set_A9_IRQ_stack() {
+    int stack, mode;
+    stack = A9_ONCHIP_END - 7; // top of A9 onchip memory, aligned to 8 bytes
+    /* change processor to IRQ mode with interrupts disabled */
+    mode = 0b11010010;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(mode));
+    /* set banked stack pointer */
+    asm("mov sp, %[ps]" : : [ps] "r"(stack));
+    /* go back to SVC mode before executing subroutine return! */
+    mode = 0b11010011;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(mode));
+}
+
+/*
+ * Turn on interrupts in the ARM processor
+*/
+void enable_A9_interrupts() {
+    int status = 0b01010011;
+    asm("msr cpsr, %[ps]" : : [ps] "r"(status));
+}
+
+/*
+ * Configure the Generic Interrupt Controller (GIC)
+*/
+void config_GIC() {
+    config_interrupt(73, 1); // configure the FPGA KEYs interrupt (73)
+    config_interrupt(29, 1);
+    // Set Interrupt Priority Mask Register (ICCPMR). Enable interrupts of all priorities
+    *((int *) (MPCORE_GIC_CPUIF + ICCPMR)) = 0xFFFF;
+    // Set CPU Interface Control Register (ICCICR). Enable signaling of interrupts
+    *((int *) (MPCORE_GIC_CPUIF + ICCICR)) = 1;
+    // Configure the Distributor Control Register (ICDDCR) to send pending interrupts to CPUs
+    *((int *) (MPCORE_GIC_DIST + ICDDCR)) = 1;
+}
+
+/*
+ * Configure Set Enable Registers (ICDISERn) and Interrupt Processor Target
+ * Registers (ICDIPTRn). The default (reset) values are used for other registers
+ * in the GIC.
+*/
+void config_interrupt(int N, int CPU_target) {
+    int reg_offset, index, value, address;
+    /* Configure the Interrupt Set-Enable Registers (ICDISERn).
+     * reg_offset = (integer_div(N / 32) * 4
+     * value = 1 << (N mod 32) */
+    reg_offset = (N >> 3) & 0xFFFFFFFC;
+    index = N & 0x1F;
+    value = 0x1 << index;
+    address = (MPCORE_GIC_DIST + ICDISER) + reg_offset;
+    /* Now that we know the register address and value, set the appropriate bit */
+    *(int *) address |= value;
+    /* Configure the Interrupt Processor Targets Register (ICDIPTRn)
+     * reg_offset = integer_div(N / 4) * 4
+     * index = N mod 4 */
+    reg_offset = (N & 0xFFFFFFFC);
+    index = N & 0x3;
+    address = (MPCORE_GIC_DIST + ICDIPTR) + reg_offset + index;
+    /* Now that we know the register address and value, write to (only) the
+     * appropriate byte */
+    *(char *) address = (char) CPU_target;
+}
+
+/********************************************************************
+* Pushbutton - Interrupt Service Routine
+*
+* This routine checks which KEY has been pressed. It writes to HEX0
+*******************************************************************/
+void pushbutton_ISR() {
+    /* KEY base address */
+    volatile int *KEY_ptr = (int *) KEY_BASE;
+    int press;
+    press = *(KEY_ptr + 3); // read the pushbutton interrupt register
+    *(KEY_ptr + 3) = press; // Clear the interrupt
+    stopTimer();
+    time = 0;
+    config_A9_private_timer();
+    dead = 0;
+    int i, j;
+    for (i = 0; i < NUM_CANNONS; i++) {
+        cannonYes[i] = 0;
     }
-    return o;
+    for (i = 0; i < RESOLUTION_Y; i++) {
+        for (j = 0; j < RESOLUTION_X; j++) {
+            displayFront[i][j] = 0;
+            displayBack[i][j] = 0;
+        }
+    }
+    for (i = 0; i < NUM_CANNONS; i++) {
+        for (j = 0; j < DIAGONAL_LENGTH; j++) {
+            xPathBullet[i][j] = -1;
+            yPathBullet[i][j] = -1;
+        }
+    }
+    playerX = RESOLUTION_X / 2 - 1;
+    playerY = RESOLUTION_Y / 2 - 1;
+    clearHEX();
+    displayTimer();
+}
+
+void A9_private_timer_ISR() {
+    volatile int *MPCORE_PRIV_TIMER_ptr = (int *) MPCORE_PRIV_TIMER;
+    *(MPCORE_PRIV_TIMER_ptr + 3) = 1;
+    displayTimer();
+    time++;
+}
+
+void stopTimer() {
+    volatile int *A9_private_timer_ptr = (int *) MPCORE_PRIV_TIMER;
+    *(A9_private_timer_ptr + 2) = 0b000;
+}
+
+void displayLose() {
+    volatile int *HEX3_HEX0_ptr = (int *) HEX3_HEX0_BASE;
+    *HEX3_HEX0_ptr = (0b1011110) | (0b1110111 << 8) | (0b1111001 << 16) | (0b1011110 << 24);// d A E d
+
+}
+
+void displayTimer() {
+    volatile int *HEX5_HEX4_ptr = (int *) HEX5_HEX4_BASE;
+    int i10 = time / 10;
+    int i1 = time % 10;
+    *HEX5_HEX4_ptr = (seg7[i1]) | (seg7[i10] << 8);
+}
+
+void clearHEX() {
+    volatile int *HEX3_HEX0_ptr = (int *) HEX3_HEX0_BASE;
+    volatile int *HEX5_HEX4_ptr = (int *) HEX5_HEX4_BASE;
+    *HEX3_HEX0_ptr = 0;
+    *HEX5_HEX4_ptr = 0;
 }
 
 #pragma clang diagnostic pop
