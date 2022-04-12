@@ -1,5 +1,3 @@
-/* This files provides address values that exist in the system */
-
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 int canDie = 1;
