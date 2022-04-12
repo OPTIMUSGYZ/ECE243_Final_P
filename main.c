@@ -2,7 +2,6 @@
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
-int drawing = 1;
 int canDie = 1;
 #define BOARD                 "DE1-SoC"
 
@@ -129,7 +128,7 @@ volatile int bulletSpeed = difficultyIncrInterval / 3;
 volatile int cannonYes[NUM_CANNONS];
 volatile int xPathBullet[NUM_CANNONS][DIAGONAL_LENGTH], yPathBullet[NUM_CANNONS][DIAGONAL_LENGTH];
 
-volatile int playerX = RESOLUTION_X / 2 - 1, playerY = RESOLUTION_Y / 2 - 1;
+volatile int playerX = RESOLUTION_X / 2 - 1 - playerSize, playerY = RESOLUTION_Y / 2 - 1 - playerSize;
 volatile int dxPlayer = 0, dyPlayer = 0;
 
 void swap(int *a, int *b);
@@ -189,8 +188,7 @@ int main(void) {
     // configure pushbutton KEYs to generate interrupts
     enable_A9_interrupts(); // enable interrupts in the A9 processor while (1) // wait for an interrupt
     volatile int *pixel_ctrl_ptr;
-    if (drawing)
-        pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
+    pixel_ctrl_ptr = (int *) PIXEL_BUF_CTRL_BASE;
     volatile int i, j;
 //    cannonYes[0] = 1;
     for (i = 0; i < NUM_CANNONS; i++) {
@@ -215,16 +213,6 @@ int main(void) {
 
     int cannonDirections[NUM_CANNONS];
     // {bulletYes,cannonYes,count}
-    /*int bulletYes[NUM_CANNONS][2] = {{cannonYes[0], cannonYes[0]},
-                                     {cannonYes[1], cannonYes[1]},
-                                     {cannonYes[2], cannonYes[2]},
-                                     {cannonYes[3], cannonYes[3]},
-                                     {cannonYes[4], cannonYes[4]},
-                                     {cannonYes[5], cannonYes[5]},
-                                     {cannonYes[6], cannonYes[6]},
-                                     {cannonYes[7], cannonYes[7]},
-                                     {cannonYes[8], cannonYes[8]},
-                                     {cannonYes[9], cannonYes[9]}};*/
     int bulletYes[NUM_CANNONS][3] = {{0, cannonYes[0], 0},
                                      {0, cannonYes[1], 0},
                                      {0, cannonYes[2], 0},
@@ -285,20 +273,15 @@ int main(void) {
     }
 
     /* set front pixel buffer to start of FPGA On-chip memory */
-    if (drawing)
-        *(pixel_ctrl_ptr + 1) = FPGA_ONCHIP_BASE; // first store the address in the back buffer
+    *(pixel_ctrl_ptr + 1) = FPGA_ONCHIP_BASE; // first store the address in the back buffer
     /* now, swap the front/back buffers, to set the front buffer location */
-    if (drawing)
-        wait4VSync();
+    wait4VSync();
     /* initialize a pointer to the pixel buffer, used by drawing functions */
-    if (drawing)
-        pixel_buffer_start = *pixel_ctrl_ptr;
+    pixel_buffer_start = *pixel_ctrl_ptr;
     clear_screen(); // pixel_buffer_start points to the pixel buffer
     /* set back pixel buffer to start of SDRAM memory */
-    if (drawing)
-        *(pixel_ctrl_ptr + 1) = SDRAM_BASE;
-    if (drawing)
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
+    *(pixel_ctrl_ptr + 1) = SDRAM_BASE;
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
     volatile int *PS2_ptr = (int *) PS2_BASE;
@@ -454,20 +437,6 @@ int main(void) {
         playerY += dyPlayer;
 
         if (dead) {
-            if (!drawing) {
-                FILE *f = fopen("test.txt", "w");
-                for (i = 0; i < RESOLUTION_Y; i++) {
-                    for (j = 0; j < RESOLUTION_X; j++) {
-                        if (back) {
-                            fprintf(f, "%d ", displayBack[i][j]);
-                        } else {
-                            fprintf(f, "%d ", displayFront[i][j]);
-                        }
-                    }
-                    fprintf(f, "\n");
-                }
-                exit(0);
-            }
             stopTimer();
             while (dead) {
                 displayLose();
@@ -475,10 +444,8 @@ int main(void) {
             clearHEX();
             displayTimer();
         }
-        if (drawing)
-            wait4VSync(); // swap front and back buffers on VGA vertical sync
-        if (drawing)
-            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        wait4VSync(); // swap front and back buffers on VGA vertical sync
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
         back = !back;
     }
 }
@@ -526,13 +493,6 @@ void draw_line(int x0, int y0, int x1, int y1, short int colour) {
     for (x = x0; x <= x1; x++) {
         if (is_steep) {
             plot_pixel(y, x, colour);
-//            if (back) {
-//                drewPixelBack[ndrewPixelBack][0] = y;
-//                drewPixelBack[ndrewPixelBack][1] = x;
-//            } else {
-//                drewPixelFront[ndrewPixelFront][0] = y;
-//                drewPixelFront[ndrewPixelFront][1] = x;
-//            }
         } else {
             plot_pixel(x, y, colour);
         }
@@ -613,8 +573,7 @@ void plot_pixel(int x, int y, short int line_color) {
         }
     }
 
-    if (drawing)
-        *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
+    *(short int *) (pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
 
 void drawCannonLeftEdge(int x, int y, double direction, int appear) {
