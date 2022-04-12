@@ -3,7 +3,7 @@
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 int drawing = 1;
-int canDie = 0;
+int canDie = 1;
 #define BOARD                 "DE1-SoC"
 
 /* Memory */
@@ -319,13 +319,13 @@ int main(void) {
         if ((int) byte2 == 0xE0) {
             // up, down, left, right
             if ((int) byte3 == 0x75) {
-                dyPlayer = -2;
+                dyPlayer = -(bulletSpeed + 1);
             } else if ((int) byte3 == 0x72) {
-                dyPlayer = 2;
+                dyPlayer = (bulletSpeed + 1);
             } else if ((int) byte3 == 0x6B) {
-                dxPlayer = -2;
+                dxPlayer = -(bulletSpeed + 1);
             } else if ((int) byte3 == 0x74) {
-                dxPlayer = 2;
+                dxPlayer = (bulletSpeed + 1);
             }
         } else if ((int) byte2 == 0xF0) {
             if ((int) byte3 == 0x75) {
@@ -344,7 +344,7 @@ int main(void) {
             cannonYes[i] = 1;
 //            time = i * difficultyIncrInterval + 1;
         } else {
-            if (time > 0 && !(time % difficultyIncrInterval)) {
+            if (time > 0 && !(time % (difficultyIncrInterval / 2))) {
                 if (bulletSpeed < 20) {
                     bulletSpeed++;
                 }
@@ -964,7 +964,7 @@ void pushbutton_ISR() {
     playerY = RESOLUTION_Y / 2 - 1;
     dxPlayer = 0;
     dyPlayer = 0;
-    bulletSpeed = difficultyIncrInterval / 2;
+    bulletSpeed = difficultyIncrInterval / 3;
     clearHEX();
     displayTimer();
 }
