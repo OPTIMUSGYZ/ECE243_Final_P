@@ -404,7 +404,6 @@ int main(void) {
             int shouldBeDead = 0;
             for (i = 0; i < playerSize && !dead; i++) {
                 for (j = 0; j < playerSize && !dead; j++) {
-//                printf("px:%d, py:%d, i:%d, j:%d, d:%d\n", playerX, playerY, i, j, displayFront[playerY + i][playerX + j]);
                     if (!back) {
                         shouldBeDead = displayBack[playerY + i][playerX + j];
                     } else {
