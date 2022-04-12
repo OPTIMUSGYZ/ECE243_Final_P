@@ -3,7 +3,7 @@
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 int drawing = 1;
-int canDie = 1;
+int canDie = 0;
 #define BOARD                 "DE1-SoC"
 
 /* Memory */
@@ -93,7 +93,7 @@ int canDie = 1;
 #define NUM_CANNONS 10
 #define cannonSize 9
 #define playerSize 15
-#define difficultyIncrInterval 1
+#define difficultyIncrInterval 8
 
 #define FALSE 0
 #define TRUE 1
@@ -120,15 +120,17 @@ volatile int ndrewPixelBack = 0;
 volatile int ndrewPixelFront = 0;
 
 volatile int dead = 0;
+volatile int win = 0;
 volatile int time = 0;
 
 int bulletSize = cannonSize - 1;
 
-volatile int bulletSpeed = 3;
+volatile int bulletSpeed = difficultyIncrInterval / 3;
 volatile int cannonYes[NUM_CANNONS];
 volatile int xPathBullet[NUM_CANNONS][DIAGONAL_LENGTH], yPathBullet[NUM_CANNONS][DIAGONAL_LENGTH];
 
 volatile int playerX = RESOLUTION_X / 2 - 1, playerY = RESOLUTION_Y / 2 - 1;
+volatile int dxPlayer = 0, dyPlayer = 0;
 
 void swap(int *a, int *b);
 
@@ -151,8 +153,8 @@ void drawPlayer(int x, int y);
 void drawBullet(int x, int y, int appear);
 
 void computeBulletPath(int bulletX, int bulletY, int playerX, int playerY, int bulletIdx,
-                       int bulletPathX[NUM_CANNONS][DIAGONAL_LENGTH],
-                       int bulletPathY[NUM_CANNONS][DIAGONAL_LENGTH], int speed);
+                       volatile int bulletPathX[NUM_CANNONS][DIAGONAL_LENGTH],
+                       volatile int bulletPathY[NUM_CANNONS][DIAGONAL_LENGTH], int speed);
 
 void disable_A9_interrupts();
 
@@ -173,6 +175,8 @@ void displayLose();
 void displayTimer();
 
 void clearHEX();
+
+void displayWin();
 
 int main(void) {
     disable_A9_interrupts(); // disable interrupts in the A9 processor
@@ -297,12 +301,48 @@ int main(void) {
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
-    int dxPlayer = 1, dyPlayer = 1;
+    volatile int *PS2_ptr = (int *) PS2_BASE;
+    int PS2_data, RVALID;
+    char byte1 = 0, byte2 = 0, byte3 = 0;
+
     while (1) {
+        // read keyboard
+        PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+        RVALID = PS2_data & 0x8000; // extract the RVALID field
+        if (RVALID) {
+            /* shift the next data byte into the display */
+            byte1 = byte2;
+            byte2 = byte3;
+            byte3 = PS2_data & 0xFF;
+        }
+
+        if ((int) byte2 == 0xE0) {
+            // up, down, left, right
+            if ((int) byte3 == 0x75) {
+                dyPlayer = -2;
+            } else if ((int) byte3 == 0x72) {
+                dyPlayer = 2;
+            } else if ((int) byte3 == 0x6B) {
+                dxPlayer = -2;
+            } else if ((int) byte3 == 0x74) {
+                dxPlayer = 2;
+            }
+        } else if ((int) byte2 == 0xF0) {
+            if ((int) byte3 == 0x75) {
+                dyPlayer = 0;
+            } else if ((int) byte3 == 0x72) {
+                dyPlayer = 0;
+            } else if ((int) byte3 == 0x6B) {
+                dxPlayer = 0;
+            } else if ((int) byte3 == 0x74) {
+                dxPlayer = 0;
+            }
+        }
+
         if (time > 0 && time <= difficultyIncrInterval * NUM_CANNONS) {
             i = (time - 1) / difficultyIncrInterval;
             cannonYes[i] = 1;
-            time = i * difficultyIncrInterval + 1;
+//            time = i * difficultyIncrInterval + 1;
         } else {
             if (time > 0 && !(time % difficultyIncrInterval)) {
                 if (bulletSpeed < 20) {
@@ -310,7 +350,6 @@ int main(void) {
                 }
             }
         }
-        printf("time: %d, speed: %d\n", time, bulletSpeed);
         /* Erase any boxes and lines that were drawn in the last iteration */
         clear_screen();
         drawPlayer(playerX, playerY);
@@ -350,7 +389,11 @@ int main(void) {
             }
         }
         if (time > 99) {
-            while (1);
+            win = 1;
+            stopTimer();
+            while (win) {
+                displayWin();
+            }
         }
 
         for (i = 0; i < NUM_CANNONS; i++) {
@@ -393,15 +436,19 @@ int main(void) {
         }
 
 
-        if (playerX <= 0 && dxPlayer < 0) {
-            dxPlayer = 1;
-        } else if (playerX >= RESOLUTION_X - 1 - playerSize && dxPlayer > 0) {
-            dxPlayer = -1;
+        if (playerX + dxPlayer <= 0) {
+            dxPlayer = 0;
+            playerX = 0;
+        } else if (playerX + dxPlayer >= RESOLUTION_X - 1 - playerSize) {
+            dxPlayer = 0;
+            playerX = RESOLUTION_X - 1 - playerSize;
         }
-        if (playerY <= 0 && dyPlayer < 0) {
-            dyPlayer = 1;
-        } else if (playerY >= RESOLUTION_Y - 1 - playerSize && dyPlayer > 0) {
-            dyPlayer = -1;
+        if (playerY + dyPlayer <= 0) {
+            dyPlayer = 0;
+            playerY = 0;
+        } else if (playerY + dyPlayer >= RESOLUTION_Y - 1 - playerSize) {
+            dyPlayer = 0;
+            playerY = RESOLUTION_Y - 1 - playerSize;
         }
         playerX += dxPlayer;
         playerY += dyPlayer;
@@ -726,8 +773,8 @@ void drawBullet(int x, int y, int appear) {
 }
 
 void computeBulletPath(int bulletX, int bulletY, int playerX, int playerY, int bulletIdx,
-                       int bulletPathX[NUM_CANNONS][DIAGONAL_LENGTH],
-                       int bulletPathY[NUM_CANNONS][DIAGONAL_LENGTH], int speed) {
+                       volatile int bulletPathX[NUM_CANNONS][DIAGONAL_LENGTH],
+                       volatile int bulletPathY[NUM_CANNONS][DIAGONAL_LENGTH], int speed) {
     double dx = playerX - bulletX;
     double dy = playerY - bulletY;
     double l = sqrt(pow(dx, 2) + pow(dy, 2));
@@ -894,9 +941,9 @@ void pushbutton_ISR() {
     press = *(KEY_ptr + 3); // read the pushbutton interrupt register
     *(KEY_ptr + 3) = press; // Clear the interrupt
     stopTimer();
-    time = 0;
     config_A9_private_timer();
     dead = 0;
+    win = 0;
     int i, j;
     for (i = 0; i < NUM_CANNONS; i++) {
         cannonYes[i] = 0;
@@ -915,6 +962,9 @@ void pushbutton_ISR() {
     }
     playerX = RESOLUTION_X / 2 - 1;
     playerY = RESOLUTION_Y / 2 - 1;
+    dxPlayer = 0;
+    dyPlayer = 0;
+    bulletSpeed = difficultyIncrInterval / 2;
     clearHEX();
     displayTimer();
 }
@@ -929,6 +979,7 @@ void A9_private_timer_ISR() {
 void stopTimer() {
     volatile int *A9_private_timer_ptr = (int *) MPCORE_PRIV_TIMER;
     *(A9_private_timer_ptr + 2) = 0b000;
+    time = 0;
 }
 
 void displayLose() {
@@ -949,6 +1000,11 @@ void clearHEX() {
     volatile int *HEX5_HEX4_ptr = (int *) HEX5_HEX4_BASE;
     *HEX3_HEX0_ptr = 0;
     *HEX5_HEX4_ptr = 0;
+}
+
+void displayWin() {
+    volatile int *HEX3_HEX0_ptr = (int *) HEX3_HEX0_BASE;
+    *HEX3_HEX0_ptr = (0b1111001) | (0b0110111 << 8) | (seg7[0] << 16) | (0b1011110 << 24);
 }
 
 #pragma clang diagnostic pop
